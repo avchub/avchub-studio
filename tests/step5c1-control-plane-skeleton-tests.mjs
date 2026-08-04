@@ -35,6 +35,20 @@ function check(name, actual, expected = true) {
   if (ok) passed += 1;
   else { failures += 1; console.error(`FAIL ${name}\n  actual:   ${JSON.stringify(sanitize(actual))}\n  expected: ${JSON.stringify(sanitize(expected))}`); }
 }
+// The failure printer above is the one thing in this file that can leak, so it is asserted rather than
+// assumed. These run before any other check, so a regression in the redactor is reported by the very
+// mechanism it protects. The shape used here is exactly the one the analyser warns about: a config object
+// carrying `password` and `apiKey`.
+{
+  const withSecrets = { host: "127.0.0.1", password: "pw-must-not-appear", nested: { apiKey: "key-must-not-appear" } };
+  const printed = JSON.stringify(sanitize(withSecrets));
+  check("redactor removes a password from failure output", !printed.includes("pw-must-not-appear"));
+  check("redactor removes a nested apiKey from failure output", !printed.includes("key-must-not-appear"));
+  check("redactor keeps the non-secret shape that makes a failure readable",
+    printed.includes("host") && printed.includes("password") && printed.includes("apiKey"));
+  check("redactor survives a value that cannot be serialized", typeof JSON.stringify(sanitize({ cyclic: (() => { const o = {}; o.self = o; return o; })() })), "string");
+}
+
 async function checkThrowsAsync(name, fn, code) {
   try { await fn(); failures += 1; console.error(`FAIL ${name} (expected throw)`); }
   catch (e) { if (code && e.code !== code) { failures += 1; console.error(`FAIL ${name} (code ${e.code} != ${code})`); } else passed += 1; }
