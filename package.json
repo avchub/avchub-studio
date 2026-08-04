@@ -74,6 +74,6 @@
     "ws": "^8.21.0"
   },
   "devDependencies": {
-    "playwright-core": "1.61.1"
+    "playwright-core": "1.62.1"
   }
 }
