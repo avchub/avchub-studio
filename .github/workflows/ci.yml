@@ -25,7 +25,7 @@ jobs:
           - { name: "ubuntu / node 22", os: ubuntu-latest, node: "22" }
           - { name: "windows / node 22", os: windows-latest, node: "22" }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -59,7 +59,7 @@ jobs:
     name: secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history, so the scan sees every commit rather than only the tip.
           fetch-depth: 0
@@ -91,7 +91,7 @@ jobs:
       CONTROL_PLANE_DB_OPS_URL: postgres://cp_ops_enumerator:ci_ops@127.0.0.1:5432/avchub_studio_test
       CONTROL_PLANE_DB_ALLOW_DESTRUCTIVE_TESTS: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
