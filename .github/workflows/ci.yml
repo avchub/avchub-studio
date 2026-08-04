@@ -14,6 +14,10 @@ jobs:
   check:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    # A job with no timeout inherits GitHub's 6-hour default, which is not a limit anyone waits for. These
+    # jobs finish in a few minutes; the bounds below are generous enough never to cut a healthy run short
+    # and small enough that a hang is reported while someone is still looking at the run.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       # Deliberately not a full cross product. Both supported Node versions are covered, and both platforms
@@ -40,9 +44,62 @@ jobs:
 
       # FFmpeg is not a dependency of this project — the operator installs it. Installing it explicitly on
       # Linux means the media suites genuinely RUN on at least one platform instead of always skipping.
+      #
+      # This step once sat for 29 minutes on a single apt read while the identical step passed on the sibling
+      # job in the same run, and would have kept sitting until the 6-hour job limit. apt has no default
+      # network timeout, so the failure mode is a HANG, not an error — and a hang is the one thing a retry
+      # loop cannot see. Each apt call therefore runs under `timeout`, which converts the hang into exit 124
+      # that the loop CAN act on.
+      #
+      # If all three attempts fail the step FAILS the job. Continuing without FFmpeg would let the media
+      # suites skip and the job report green with less coverage than it claims — worse than a red run,
+      # because nobody would look. `ffmpeg -version` is checked afterwards for the same reason: a partial
+      # install must not read as success.
       - name: Install FFmpeg (Linux only)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        # Outer backstop. The inner budget is 3 x (90s + 180s) plus 40s of backoff = ~13.9 min, so this
+        # bound is never what stops a healthy run; it only catches something the inner timeouts cannot.
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            echo "::group::FFmpeg install attempt ${attempt}/3"
+            # Acquire::Retries lets apt recover from a single bad mirror on its own; the http timeouts stop
+            # it waiting forever on one that accepts the connection and then goes quiet.
+            apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+            status=0
+            if timeout 90 sudo apt-get update "${apt_opts[@]}" \
+               && timeout 180 sudo apt-get install -y --no-install-recommends "${apt_opts[@]}" ffmpeg; then
+              echo "::endgroup::"
+              # Prove the binaries the suites need are actually CALLABLE, not merely unpacked. apt can
+              # report success over a broken install, and this step exists to make the media suites run —
+              # letting them skip while the job stays green is the failure this whole step guards against.
+              # Command substitution rather than a pipe: `ffmpeg -version | head -1` returns head's status,
+              # so a missing binary would pass, and under pipefail a SIGPIPE would fail a healthy one.
+              if ffmpeg_version=$(ffmpeg -version 2>&1) && ffprobe_version=$(ffprobe -version 2>&1); then
+                echo "${ffmpeg_version%%$'\n'*}"
+                echo "${ffprobe_version%%$'\n'*}"
+                exit 0
+              fi
+              echo "::error title=FFmpeg install::apt reported success but ffmpeg/ffprobe are not usable"
+              exit 1
+            else
+              # $? must be read INSIDE the else branch. After an if/fi whose condition was false and which
+              # has no else, POSIX defines $? as 0, so reading it there would report success for every
+              # failure and hide the 124 that distinguishes a hang from an error.
+              status=$?
+            fi
+            echo "::endgroup::"
+            if [ "${status}" -eq 124 ]; then
+              echo "::warning title=FFmpeg install::attempt ${attempt} timed out (apt hung, exit 124)"
+            else
+              echo "::warning title=FFmpeg install::attempt ${attempt} failed with exit ${status}"
+            fi
+            [ "${attempt}" -lt 3 ] && sleep $((attempt * 10))
+          done
+          echo "::error title=FFmpeg install::could not install FFmpeg after 3 attempts; failing rather than running the media suites as skips"
+          exit 1
 
       - run: npm run lint
       - run: npm run typecheck
@@ -58,6 +115,7 @@ jobs:
   secrets:
     name: secret scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,6 +131,7 @@ jobs:
   database:
     name: database suites
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         # Pinned by digest so the job cannot silently change database under us: postgres:16 is a moving tag
