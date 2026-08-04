@@ -7,6 +7,10 @@ import {
   PROTOCOL_ERRORS, ProtocolError, isProtocolErrorCode
 } from "../lib/protocol/errors.mjs";
 import {
+  resolveHeartbeatIntervalMs, HEARTBEAT_INTERVAL_MIN_MS, HEARTBEAT_INTERVAL_MAX_MS,
+  HEARTBEAT_INTERVAL_DEFAULT_MS
+} from "../lib/worker/remote/remote-worker-agent.mjs";
+import {
   generateId, validateId, parseId, assertId, generateUlid, isValidUlid,
   ulidTimeMs, ID_PREFIXES, isKnownPrefix
 } from "../lib/protocol/ids.mjs";
@@ -430,6 +434,28 @@ const IDS = {
   // a dangerous-field error names the field, not a secret value
   try { validateJobInput("EXPORT_PROJECT", { projectId: IDS.prj, episodeId: IDS.ep, token: "sk-supersecret-123" }); }
   catch (e) { check("dangerous error does not echo secret", JSON.stringify(e.toJSON()).includes("sk-supersecret"), false); }
+}
+
+// ================= heartbeat period is remote input =================
+// The period arrives in the server's WELCOME frame. A floor alone looked sufficient and was not: Node
+// cannot represent a delay above 2^31-1 ms and does not reject one — it warns and falls back to 1 ms. So
+// `Math.max(5000, x)` turned a slow heartbeat into a flood for exactly the values the floor was supposed
+// to defend against.
+{
+  check("heartbeat keeps a normal server value", resolveHeartbeatIntervalMs(20_000), 20_000);
+  check("heartbeat keeps the gateway maximum", resolveHeartbeatIntervalMs(120_000), 120_000);
+  check("heartbeat floors a too-small value", resolveHeartbeatIntervalMs(10), HEARTBEAT_INTERVAL_MIN_MS);
+  check("heartbeat caps a value that would overflow to 1ms", resolveHeartbeatIntervalMs(2 ** 31), HEARTBEAT_INTERVAL_MAX_MS);
+  check("heartbeat caps an absurd value", resolveHeartbeatIntervalMs(3e9), HEARTBEAT_INTERVAL_MAX_MS);
+  check("heartbeat rejects a non-numeric value", resolveHeartbeatIntervalMs("soon"), HEARTBEAT_INTERVAL_DEFAULT_MS);
+  check("heartbeat rejects Infinity", resolveHeartbeatIntervalMs(Infinity), HEARTBEAT_INTERVAL_DEFAULT_MS);
+  check("heartbeat rejects a negative value", resolveHeartbeatIntervalMs(-1), HEARTBEAT_INTERVAL_DEFAULT_MS);
+  check("heartbeat defaults on a missing value", resolveHeartbeatIntervalMs(undefined), HEARTBEAT_INTERVAL_DEFAULT_MS);
+  check("heartbeat result is always a safe integer delay",
+    [0, 1, 5e3, 1e6, 2 ** 40, NaN, null, "x"].every((v) => {
+      const r = resolveHeartbeatIntervalMs(v);
+      return Number.isInteger(r) && r >= HEARTBEAT_INTERVAL_MIN_MS && r <= HEARTBEAT_INTERVAL_MAX_MS;
+    }));
 }
 
 console.log(`\n${passed} passed, ${failures} failed`);

@@ -25,11 +25,11 @@ jobs:
           - { name: "ubuntu / node 22", os: ubuntu-latest, node: "22" }
           - { name: "windows / node 22", os: windows-latest, node: "22" }
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
           # Keyed on package-lock.json, which is committed.
@@ -59,12 +59,12 @@ jobs:
     name: secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history, so the scan sees every commit rather than only the tip.
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
       # No npm ci: the scanner uses only Node built-ins, by design, so no dependency can influence it.
@@ -75,7 +75,10 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # Pinned by digest so the job cannot silently change database under us: postgres:16 is a moving tag
+        # that gets a new patch build regularly. This is the multi-arch index digest, so it resolves on any
+        # runner architecture. Dependabot keeps it current from the tag in the comment.
+        image: postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20 # postgres:16
         env:
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]
@@ -91,10 +94,10 @@ jobs:
       CONTROL_PLANE_DB_OPS_URL: postgres://cp_ops_enumerator:ci_ops@127.0.0.1:5432/avchub_studio_test
       CONTROL_PLANE_DB_ALLOW_DESTRUCTIVE_TESTS: "true"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: npm

@@ -2,7 +2,7 @@
 // AES-256-GCM secret box). No DB, no network. Proves the security-critical primitives before any wiring.
 import { hashPassword, verifyPassword, needsRehash, validatePasswordPolicy, ARGON2_PARAMS } from "../lib/auth/password.mjs";
 import { generateTotpSecret, generateTotp, verifyTotp, base32Encode, base32Decode, otpauthUrl } from "../lib/auth/totp.mjs";
-import { generateRecoveryCodes, hashRecoveryCode, normalizeRecoveryCode, matchRecoveryHash } from "../lib/auth/recovery-codes.mjs";
+import { generateRecoveryCodes, generateRecoveryCode, hashRecoveryCode, normalizeRecoveryCode, matchRecoveryHash, ALPHABET } from "../lib/auth/recovery-codes.mjs";
 import { generateToken, hashToken, tokenHashEquals, issueToken } from "../lib/auth/tokens.mjs";
 import { encryptSecret, decryptSecret, generateSecretBoxKey } from "../lib/auth/secret-box.mjs";
 
@@ -62,6 +62,30 @@ async function run() {
   check("C match finds the right hash", matchRecoveryHash(rc.plaintext[3], rc.hashes) === rc.hashes[3]);
   check("C match miss -> null", matchRecoveryHash("ZZZZZ-ZZZZZ", rc.hashes) === null);
   check("C normalize strips separators", normalizeRecoveryCode("a3f9k-qm7xz") === "A3F9KQM7XZ");
+
+  // The generator used to reduce a random BYTE with `% ALPHABET.length`. 256 = 8*31 + 8, so the first eight
+  // characters came up 9 times in 256 against 8 for the rest. Proving that by sampling would be a flaky
+  // distribution test, so the invariant is asserted deterministically instead: the index source is injected,
+  // and an index outside the alphabet must be REFUSED rather than folded. Reintroducing a modulo makes the
+  // refusal disappear and these two assertions fail.
+  let seq = 0;
+  const fixed = (values) => { seq = 0; return () => values[seq++ % values.length]; };
+  check("C code maps index to alphabet position exactly",
+    generateRecoveryCode({ randomIndex: fixed([0]) }) === "22222-22222");
+  check("C code reaches the last alphabet character",
+    generateRecoveryCode({ randomIndex: fixed([ALPHABET.length - 1]) }) === "ZZZZZ-ZZZZZ");
+  check("C every alphabet index is reachable and in order",
+    generateRecoveryCode({ randomIndex: fixed([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) }) === `${ALPHABET.slice(0, 5)}-${ALPHABET.slice(5, 10)}`);
+  throwsSync("C an out-of-range index is refused, not folded with a modulo",
+    () => generateRecoveryCode({ randomIndex: fixed([ALPHABET.length]) }), "E_RECOVERY_CODE_INDEX_RANGE");
+  throwsSync("C a raw byte value is refused (this is the old bug's input)",
+    () => generateRecoveryCode({ randomIndex: fixed([200]) }), "E_RECOVERY_CODE_INDEX_RANGE");
+  throwsSync("C a non-integer index is refused",
+    () => generateRecoveryCode({ randomIndex: fixed([1.5]) }), "E_RECOVERY_CODE_INDEX_RANGE");
+  check("C alphabet still excludes confusable characters",
+    !/[01OIL]/.test(ALPHABET) && ALPHABET.length === 31);
+  check("C entropy unchanged: 10 characters from a 31-symbol alphabet",
+    generateRecoveryCode().replace("-", "").length === 10);
 
   // ---- D. tokens ----
   const tk = generateToken(32);

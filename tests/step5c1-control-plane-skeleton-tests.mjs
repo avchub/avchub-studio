@@ -26,10 +26,14 @@ import { validateId } from "../lib/protocol/ids.mjs";
 
 let un = false; process.on("unhandledRejection", (e) => { un = true; console.error("UNHANDLED", e && e.message); });
 let failures = 0, passed = 0;
+// Failure output goes through the project's own redactor. Several assertions here compare whole config
+// objects, which carry password and apiKey fields, and a failing assertion in CI writes its "actual" value
+// into a public build log. Redacting costs nothing: the shape and every non-secret field still print, which
+// is what makes a failure diagnosable in the first place.
 function check(name, actual, expected = true) {
   const ok = typeof expected === "boolean" ? Boolean(actual) === expected : actual === expected;
   if (ok) passed += 1;
-  else { failures += 1; console.error(`FAIL ${name}\n  actual:   ${JSON.stringify(actual)}\n  expected: ${JSON.stringify(expected)}`); }
+  else { failures += 1; console.error(`FAIL ${name}\n  actual:   ${JSON.stringify(sanitize(actual))}\n  expected: ${JSON.stringify(sanitize(expected))}`); }
 }
 async function checkThrowsAsync(name, fn, code) {
   try { await fn(); failures += 1; console.error(`FAIL ${name} (expected throw)`); }

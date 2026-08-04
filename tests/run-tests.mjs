@@ -19,6 +19,7 @@ import {
   normalizeProvider, defaultModelForProvider, normalizeClaudeCredential,
   providerMaxTokensCap, isDefaultAnthropicBaseUrl
 } from "../lib/llm.mjs";
+import { escapeFilterPath, escapeFilterText } from "../lib/media/ffmpeg-filter.mjs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 
@@ -176,11 +177,60 @@ check("toRecordPath posix-relative", toRecordPath(fromRoot("output", "a.md")), "
   check("repairUnescapedQuotes parses", JSON.parse(repaired).a.includes("z"));
 }
 
+// ---------- ffmpeg filtergraph escaping ----------
+// These strings are never seen by a shell — every caller spawns ffmpeg with an argv array. What parses them
+// is ffmpeg's filtergraph grammar, where ':' separates options, '\' escapes, and the value sits inside
+// '...'. Getting it wrong does not fail; it silently drops the option, which is why these are asserted
+// character by character rather than by running ffmpeg.
+{
+  // A Windows font path: the drive-letter colon is what truncated fontfile='C:/...' to 'C'.
+  check("filter path escapes a windows drive colon",
+    escapeFilterPath("C:/Windows/Fonts/arial.ttf", { windowsSeparators: true }),
+    "C\\:/Windows/Fonts/arial.ttf");
+  // Backslash separators are rewritten on Windows, where a backslash can only ever be a separator.
+  check("filter path rewrites windows separators",
+    escapeFilterPath("C:\\Windows\\Fonts\\arial.ttf", { windowsSeparators: true }),
+    "C\\:/Windows/Fonts/arial.ttf");
+  // On POSIX a backslash is a legal filename character, so it must be ESCAPED, never rewritten —
+  // rewriting it would silently name a different file.
+  check("filter path escapes a posix backslash instead of rewriting it",
+    escapeFilterPath("/media/od\\d name/clip.srt", { windowsSeparators: false }),
+    "/media/od\\\\d name/clip.srt");
+  check("filter path leaves a plain posix path alone",
+    escapeFilterPath("/var/media/clip.srt", { windowsSeparators: false }),
+    "/var/media/clip.srt");
+  // A quote would close the '...' section early and the rest of the path would be read as filter options.
+  check("filter path escapes a quote",
+    escapeFilterPath("/media/it's here/clip.srt", { windowsSeparators: false }),
+    "/media/it\\'s here/clip.srt");
+  check("filter path keeps spaces verbatim",
+    escapeFilterPath("/media/My Films/final cut.srt", { windowsSeparators: false }),
+    "/media/My Films/final cut.srt");
+  // Ordering regression: backslash must be handled BEFORE the escapes that introduce backslashes,
+  // otherwise the escape characters get escaped again and the value is corrupted.
+  check("filter path does not double-escape its own escapes",
+    escapeFilterPath("a\\b:c", { windowsSeparators: false }),
+    "a\\\\b\\:c");
+  check("filter text escapes backslash, quote and colon",
+    escapeFilterText("2.40s : it's \\ here"),
+    "2.40s \\: it\\'s \\\\ here");
+  check("filter text on plain label is unchanged", escapeFilterText("6.00s  (50 pct)"), "6.00s  (50 pct)");
+  check("filter escaping is total on empty input", `${escapeFilterPath(null)}|${escapeFilterText(undefined)}`, "|");
+}
+
 // ---------- story-files ----------
 {
   const block = buildMetadataBlock({ title: "A --> B", seed: "s1\nx" });
   check("metadata escapes arrow", !block.slice(4, block.lastIndexOf("-->")).includes("-->"));
   check("metadata single line", block.includes("seed: s1 x"));
+
+  // The block is a real HTML comment rendered by the static site, and HTML ends a comment at "--!>" as
+  // well as at "-->". Neutralising the "--" digraph covers both, and any other spelling built from it.
+  const bang = buildMetadataBlock({ title: "A --!> B" });
+  check("metadata neutralises the comment-end-bang form", !bang.slice(4, bang.lastIndexOf("-->")).includes("--!>"));
+  check("metadata leaves no -- digraph in the body at all",
+    !buildMetadataBlock({ title: "em--dash --- and ----" }).slice(4, -6).includes("--"));
+  check("metadata keeps a single hyphen", buildMetadataBlock({ title: "well-known" }).includes("well-known"));
 
   const dir = await mkdtemp(path.join(os.tmpdir(), "sf-"));
   const indexFile = path.join(dir, "index.csv");

@@ -149,7 +149,9 @@ check("H short title invalid-ish", validateTitle("Кратко заглавие"
 check("I dna prompt deterministic hash", stagePromptHash(buildDnaPrompt({ profile: SEED_BRAND_PROFILES[0], archetype: SEED_ARCHETYPES[4], locale: "bg-BG" })) === stagePromptHash(buildDnaPrompt({ profile: SEED_BRAND_PROFILES[0], archetype: SEED_ARCHETYPES[4], locale: "bg-BG" })));
 const dnaJson = "```json\n" + JSON.stringify(DNA_INPUT) + "\n```";
 check("I parse DNA response", parseDnaResponse(dnaJson, { locale: "bg-BG" }).protagonist === "Милена");
-check("I parse story response (JSON)", parseStoryResponseText('```json\n{"story":"' + BG_STORY.replace(/"/g, '\\"') + '"}\n```', { locale: "bg-BG" }).wordCount > 20);
+// JSON.stringify rather than a hand-rolled quote escape: escaping '"' without first escaping '\' produces
+// invalid JSON the moment the fixture grows a backslash, and the failure would look like a parser bug.
+check("I parse story response (JSON)", parseStoryResponseText('```json\n{"story":' + JSON.stringify(BG_STORY) + '}\n```', { locale: "bg-BG" }).wordCount > 20);
 check("I parse metadata", parseMetadataResponse('```json\n{"hook":"куката","excerpt":"откъс тук","socialTeaser":"тийзър","cliffhanger":"край","cta":"прочети","seoDescription":"описание","heroImagePrompt":"a woman in a Balkan kitchen holding a will"}\n```').hook === "куката");
 throws("I metadata missing hook rejected", () => parseMetadataResponse('```json\n{"excerpt":"x"}\n```'), "E_METADATA_INCOMPLETE");
 

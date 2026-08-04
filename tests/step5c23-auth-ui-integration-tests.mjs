@@ -28,7 +28,11 @@ let passed = 0, failed = 0;
 const check = (n, c) => { if (c) passed += 1; else { failed += 1; console.log("FAIL", n); } };
 const ORIGIN = "https://studio.example.com";
 const secretOf = (uri) => { const m = /[?&]secret=([A-Za-z2-7]+)/.exec(String(uri || "")); return m ? m[1] : null; };
-const cookieVal = (setCookie, name) => { for (const c of [].concat(setCookie || [])) { const m = new RegExp(`${name.replace(/[.$*]/g, "\\$&")}=([^;]*)`).exec(String(c)); if (m && m[1]) return m[1]; } return null; };
+// Escape the whole regex metacharacter set, backslash included and first. The old list was [.$*], which
+// happens to cover the cookie names in use ("__Host-..." needs none of it) but silently builds a different
+// pattern than intended for anything else — and an unescaped backslash would corrupt the escapes themselves.
+const escapeRegExp = (s) => String(s).replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+const cookieVal = (setCookie, name) => { for (const c of [].concat(setCookie || [])) { const m = new RegExp(`${escapeRegExp(name)}=([^;]*)`).exec(String(c)); if (m && m[1]) return m[1]; } return null; };
 
 async function main() {
   if (!livePgAvailable()) { console.log("Step 5C.23 auth ui integration: SKIPPED (portable PostgreSQL not available)"); return; }

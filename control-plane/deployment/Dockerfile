@@ -7,7 +7,14 @@
 #   docker build -f control-plane/deployment/Dockerfile -t avc-control-plane:skeleton .
 #   docker run --rm -p 8787:8787 --env-file control-plane/config/.env.example avc-control-plane:skeleton
 
-FROM node:22-alpine AS runtime
+# Base image: node:22-alpine, pinned by digest.
+#
+# `node:22-alpine` is a moving tag, so an unpinned base means two builds of the same commit can produce
+# different images. This is the multi-arch index digest, so it still resolves on both amd64 and arm64.
+#
+# The tag is named in this comment block rather than after the instruction because a Dockerfile has no
+# inline comments — a trailing "# node:22-alpine" would be parsed as a fourth argument to FROM and fail.
+FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS runtime
 
 # Non-root user for least privilege.
 RUN addgroup -S cp && adduser -S cp -G cp

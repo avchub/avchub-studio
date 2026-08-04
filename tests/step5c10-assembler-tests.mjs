@@ -23,7 +23,10 @@ if (!ffmpegStatic || !existsSync(ffmpegStatic)) {
 // pure buildSrt first
 {
   const srt = buildSrt([{ durationSeconds: 6, narration: "First scene" }, { durationSeconds: 4, narration: "Second scene" }]);
-  check("S1 srt has two cues", (srt.match(/-->/g) || []).length, 2);
+  // Match the whole SubRip timing line, not a bare "-->". Counting the arrow alone also counts one that
+  // appears inside narration text, so the assertion was weaker than it looked; anchoring it to the
+  // timestamp grammar is what "two cues" actually means.
+  check("S1 srt has two cues", (srt.match(/^\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}$/gm) || []).length, 2);
   check("S1 srt timing is cumulative", srt.includes("00:00:06,000 --> 00:00:10,000"), true);
   check("S1 srt carries narration", srt.includes("First scene") && srt.includes("Second scene"), true);
   check("S1 empty narration produces no cue", buildSrt([{ durationSeconds: 5, narration: "" }]).trim(), "");
