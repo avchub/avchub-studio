@@ -21,7 +21,7 @@ import { createMovieAssembler } from "../lib/movie/movie-assembler.mjs";
 import { createLocalTextProvider, createGrokChatTextProvider } from "../lib/movie/text-provider.mjs";
 import { createFacebookPublisherProvider } from "../lib/movie/publisher-provider.mjs";
 import { generateId } from "../lib/protocol/ids.mjs";
-import { ffmpegPaths } from "../lib/media/ffmpeg-locator.mjs";
+import { ffmpegPaths, ffmpegRunnable } from "../lib/media/ffmpeg-locator.mjs";
 
 // FFmpeg is not a dependency of this project: the operator installs it and the locator finds it.
 const { ffmpeg: ffmpegStatic, ffprobe: ffprobeStaticPath } = ffmpegPaths();
@@ -31,7 +31,7 @@ let passed = 0;
 function check(name, actual, expected = true) { assert.deepEqual(actual, expected, name); passed += 1; }
 async function rejects(name, fn, frag) { try { await fn(); assert.fail(name + " expected reject"); } catch (e) { if (e instanceof assert.AssertionError && /expected reject/.test(e.message)) throw e; check(name, `${e.code || ""} ${e.message || ""}`.includes(frag), true); } }
 
-if (!livePgAvailable() || !ffmpegStatic || !existsSync(ffmpegStatic)) {
+if (!livePgAvailable() || !ffmpegRunnable(ffmpegStatic) || !ffmpegRunnable(ffprobeStaticPath)) {
   console.log("Step 5C.11 content control plane: 0 passed, 0 failed (SKIPPED — no PostgreSQL or ffmpeg)");
   process.exit(0);
 }

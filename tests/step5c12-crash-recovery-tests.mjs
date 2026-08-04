@@ -22,7 +22,7 @@ import { createLocalTextProvider } from "../lib/movie/text-provider.mjs";
 import { contentRepository as crepo } from "../control-plane/src/persistence/repositories/content-repository.mjs";
 import { createOpsSnapshot } from "../lib/ops/ops-snapshot.mjs";
 import { generateId } from "../lib/protocol/ids.mjs";
-import { ffmpegPaths } from "../lib/media/ffmpeg-locator.mjs";
+import { ffmpegPaths, ffmpegRunnable } from "../lib/media/ffmpeg-locator.mjs";
 
 // FFmpeg is not a dependency of this project: the operator installs it and the locator finds it.
 const { ffmpeg: ffmpegStatic, ffprobe: ffprobeStaticPath } = ffmpegPaths();
@@ -31,7 +31,7 @@ const { Client } = pg;
 let passed = 0;
 function check(name, actual, expected = true) { assert.deepEqual(actual, expected, name); passed += 1; }
 
-if (!livePgAvailable() || !ffmpegStatic || !existsSync(ffmpegStatic)) {
+if (!livePgAvailable() || !ffmpegRunnable(ffmpegStatic) || !ffmpegRunnable(ffprobeStaticPath)) {
   console.log("Step 5C.12 crash/recovery: 0 passed, 0 failed (SKIPPED — no PostgreSQL or ffmpeg)");
   process.exit(0);
 }

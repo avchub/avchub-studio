@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { createMovieAssembler, buildSrt } from "../lib/movie/movie-assembler.mjs";
-import { ffmpegPaths } from "../lib/media/ffmpeg-locator.mjs";
+import { ffmpegPaths, ffmpegRunnable } from "../lib/media/ffmpeg-locator.mjs";
 
 // FFmpeg is not a dependency of this project: the operator installs it and the locator finds it.
 const { ffmpeg: ffmpegStatic, ffprobe: ffprobeStaticPath } = ffmpegPaths();
@@ -15,7 +15,9 @@ const { ffmpeg: ffmpegStatic, ffprobe: ffprobeStaticPath } = ffmpegPaths();
 let passed = 0;
 function check(name, actual, expected = true) { assert.deepEqual(actual, expected, name); passed += 1; }
 
-if (!ffmpegStatic || !existsSync(ffmpegStatic)) {
+// Whether the binaries RUN, not whether a file of that name sits in the working directory. This guard used
+// to be `existsSync(ffmpegStatic)`, which is false for every PATH installation — see ffmpegRunnable.
+if (!ffmpegRunnable(ffmpegStatic) || !ffmpegRunnable(ffprobeStaticPath)) {
   console.log("Step 5C.10 assembler: 0 passed, 0 failed (SKIPPED — no ffmpeg)");
   process.exit(0);
 }

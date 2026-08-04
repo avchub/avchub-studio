@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { createMovieAssembler } from "../lib/movie/movie-assembler.mjs";
 import { createWindowsSapiSpeechProvider } from "../lib/movie/speech-provider.mjs";
-import { ffmpegPaths } from "../lib/media/ffmpeg-locator.mjs";
+import { ffmpegPaths, ffmpegRunnable } from "../lib/media/ffmpeg-locator.mjs";
 
 // FFmpeg is not a dependency of this project: the operator installs it and the locator finds it.
 const { ffmpeg: ffmpegStatic, ffprobe: ffprobeStaticPath } = ffmpegPaths();
@@ -16,7 +16,7 @@ const { ffmpeg: ffmpegStatic, ffprobe: ffprobeStaticPath } = ffmpegPaths();
 let passed = 0;
 function check(name, actual, expected = true) { assert.deepEqual(actual, expected, name); passed += 1; }
 
-if (!ffmpegStatic || !existsSync(ffmpegStatic)) { console.log("Step 5C.11 audio render: 0 passed, 0 failed (SKIPPED — no ffmpeg)"); process.exit(0); }
+if (!ffmpegRunnable(ffmpegStatic) || !ffmpegRunnable(ffprobeStaticPath)) { console.log("Step 5C.11 audio render: 0 passed, 0 failed (SKIPPED — no ffmpeg)"); process.exit(0); }
 
 const dir = mkdtempSync(path.join((process.env.AVC_STUDIO_HOME || os.tmpdir()), ".audiorender-"));
 try {

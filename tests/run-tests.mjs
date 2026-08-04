@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Lightweight test harness for the pipeline libs. Run: node tests/run-tests.mjs
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { repoRoot, fromRoot, resolveFromRoot, isAbsolutePath, toRecordPath } from "../lib/paths.mjs";
@@ -20,6 +21,7 @@ import {
   providerMaxTokensCap, isDefaultAnthropicBaseUrl
 } from "../lib/llm.mjs";
 import { escapeFilterPath, escapeFilterText } from "../lib/media/ffmpeg-filter.mjs";
+import { ffmpegRunnable } from "../lib/media/ffmpeg-locator.mjs";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 
@@ -216,6 +218,30 @@ check("toRecordPath posix-relative", toRecordPath(fromRoot("output", "a.md")), "
     "2.40s \\: it\\'s \\\\ here");
   check("filter text on plain label is unchanged", escapeFilterText("6.00s  (50 pct)"), "6.00s  (50 pct)");
   check("filter escaping is total on empty input", `${escapeFilterPath(null)}|${escapeFilterText(undefined)}`, "|");
+}
+
+// ---------- ffmpeg availability probe ----------
+// Six suites and the ops health snapshot decided "is FFmpeg here?" with `existsSync(binary)`. The locator's
+// usual answer is the bare command name "ffmpeg", left for PATH to resolve, and existsSync("ffmpeg") asks
+// whether a file of that name sits in the CURRENT DIRECTORY. So every one of them reported "no ffmpeg" on a
+// perfectly good PATH installation — including CI, which installs FFmpeg precisely so those suites run.
+{
+  // "node" is a bare command name resolved through PATH and is guaranteed present — this process is it.
+  // That is the exact shape that broke: on PATH, but not a file in the working directory. probeArgs is
+  // overridden only because node spells the flag --version; the resolution path under test is the same.
+  check("runnable finds a PATH command that is not a file here",
+    ffmpegRunnable("node", { probeArgs: ["--version"] }), true);
+  check("the old existsSync test would have called that missing", existsSync("node"), false);
+  // And the probe must actually gate on the exit status, not merely on the command being spawnable.
+  check("runnable rejects a PATH command whose probe fails",
+    ffmpegRunnable("node", { probeArgs: ["--this-flag-does-not-exist"] }), false);
+
+  check("runnable rejects a command that does not exist", ffmpegRunnable("definitely-not-a-real-binary-xyz"), false);
+  check("runnable rejects an absolute path to nothing",
+    ffmpegRunnable(path.join(repoRoot, "no", "such", "ffmpeg.exe")), false);
+  check("runnable rejects empty input", [ffmpegRunnable(""), ffmpegRunnable(null), ffmpegRunnable(undefined)].join(","), "false,false,false");
+  // A real file that is not an executable must not count as runnable.
+  check("runnable rejects a non-executable file", ffmpegRunnable(path.join(repoRoot, "package.json")), false);
 }
 
 // ---------- story-files ----------

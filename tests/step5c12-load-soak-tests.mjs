@@ -19,7 +19,7 @@ import { createMovieControlPlane } from "../control-plane/src/api-staging/movie-
 import { createMovieAssembler } from "../lib/movie/movie-assembler.mjs";
 import { createLocalTextProvider } from "../lib/movie/text-provider.mjs";
 import { generateId } from "../lib/protocol/ids.mjs";
-import { ffmpegPaths } from "../lib/media/ffmpeg-locator.mjs";
+import { ffmpegPaths, ffmpegRunnable } from "../lib/media/ffmpeg-locator.mjs";
 
 // FFmpeg is not a dependency of this project: the operator installs it and the locator finds it.
 const { ffmpeg: ffmpegStatic, ffprobe: ffprobeStaticPath } = ffmpegPaths();
@@ -28,7 +28,7 @@ const { Client } = pg;
 let passed = 0;
 function check(name, actual, expected = true) { assert.deepEqual(actual, expected, name); passed += 1; }
 
-if (!livePgAvailable() || !ffmpegStatic || !existsSync(ffmpegStatic)) {
+if (!livePgAvailable() || !ffmpegRunnable(ffmpegStatic) || !ffmpegRunnable(ffprobeStaticPath)) {
   console.log("Step 5C.12 load/soak: 0 passed, 0 failed (SKIPPED — no PostgreSQL or ffmpeg)");
   process.exit(0);
 }
